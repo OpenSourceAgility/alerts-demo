@@ -27,18 +27,21 @@ ENGINE=InnoDB;
 Example data
 ------------
 
+```
 insert into Alert (message_code,urgency) values ('someLowUrgencyMessageCode',40);
 insert into Alert (message_code,urgency) values ('someHighUrgencyMessageCode',70);
+```
 
 Properties files
 ----------------
 
 Populate src/main/resources/envionment.properties file with values for
-
+```
 amazon.s3.bucketName=
 amazon.aws.accesskey=
 amazon.aws.secretkey=
 database.url=
+```
 
 Running the application
 -----------------------
