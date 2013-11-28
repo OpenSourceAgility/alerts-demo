@@ -36,13 +36,15 @@ insert into Alert (message_code,urgency) values ('someHighUrgencyMessageCode',70
 Properties files
 ----------------
 
-Populate src/main/resources/envionment.properties file with values for
+To run the main application,po pulate src/main/resources/envionment.properties file with values for
 ```
 amazon.s3.bucketName=
 amazon.aws.accesskey=
 amazon.aws.secretkey=
 database.url=
 ```
+
+( These are not required to run the integration test )
 
 Running the application
 -----------------------
@@ -60,8 +62,11 @@ This test is configured to create CSV files timestamped by minute rather than ho
 
 The test sleeps for 2 minutes before asserting that the expected CSV files have been created
 
-The AmazonS3FileUploader is mocked out and an H2 Embedded database is used instead of MySQL
+The AmazonS3FileUploader is mocked out and an H2 Embedded database is used instead of MySQL, and so the environment properties for amazon or the database are not required for this test to run.
 
+Visualising the integration graph
+---------------------------------
 
+Import the project into STS, and view the "integration-graph" tab when viewing urgent-alerts.xml or non-urgent-alerts.xml
 
 
