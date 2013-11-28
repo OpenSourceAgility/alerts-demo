@@ -11,7 +11,7 @@ Alerts with urgency > 50 are sent to an ActiveMQ queue
 Setup
 -----
 
-'''
+```
 
 CREATE TABLE Alert 
 (id MEDIUMINT NOT NULL AUTO_INCREMENT,
@@ -22,7 +22,7 @@ persist_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 PRIMARY KEY (id)) 
 ENGINE=InnoDB;
 
-'''
+```
 
 Example data
 ------------
