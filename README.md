@@ -3,7 +3,8 @@ alerts-demo
 
 Demo using Spring-Integration and Spring-Batch to poll an Alert table for new alerts and to process them according to an assigned urgency rating.
 
-Alerts with urgency <=50 are written a CSV file whos name is stamped with the hour corresponding to the persist_date.
+Alerts with urgency <=50 are written a CSV file with a filename stamped with the hour corresponding to the Alert's persist_date.
+
 These files are subsequently uploaded to Amazon S3 once it has been determined all Alerts for that hour have been processed.
 
 Alerts with urgency > 50 are sent to an ActiveMQ queue
