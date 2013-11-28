@@ -49,6 +49,10 @@ database.url=
 Running the application
 -----------------------
 
+mvn eclipse:eclipse
+
+Import the project into Eclipse/STS:
+
 Run com.opensourceagility.springintegration.alerts.Main as a Java application
 
 
