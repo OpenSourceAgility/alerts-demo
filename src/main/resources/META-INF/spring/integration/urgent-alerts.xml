@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:integration="http://www.springframework.org/schema/integration"
+	xmlns:tx="http://www.springframework.org/schema/tx" xmlns:file="http://www.springframework.org/schema/integration/file"
+	xmlns:stream="http://www.springframework.org/schema/integration/stream"
+	xmlns:int-jdbc="http://www.springframework.org/schema/integration/jdbc"
+	xmlns:jms="http://www.springframework.org/schema/integration/jms"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:oxm="http://www.springframework.org/schema/oxm"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+			http://www.springframework.org/schema/beans/spring-beans.xsd
+			http://www.springframework.org/schema/tx 
+			http://www.springframework.org/schema/tx/spring-tx-3.2.xsd
+			http://www.springframework.org/schema/integration/jdbc 
+			http://www.springframework.org/schema/integration/jdbc/spring-integration-jdbc.xsd
+			http://www.springframework.org/schema/integration/file
+			http://www.springframework.org/schema/integration/file/spring-integration-file.xsd
+			http://www.springframework.org/schema/integration/jms
+			http://www.springframework.org/schema/integration/jms/spring-integration-jms.xsd
+			http://www.springframework.org/schema/context
+			http://www.springframework.org/schema/context/spring-context.xsd
+			http://www.springframework.org/schema/integration/stream
+			http://www.springframework.org/schema/integration/stream/spring-integration-stream.xsd
+			http://www.springframework.org/schema/oxm
+			http://www.springframework.org/schema/oxm/spring-oxm-3.0.xsd
+			http://www.springframework.org/schema/integration
+			http://www.springframework.org/schema/integration/spring-integration.xsd">
+
+	<context:component-scan
+		base-package="com.opensourceagility.springintegration.alerts.urgent" />
+
+  	<!-- Create a channel to receive our batches of urgent alerts -->
+	<integration:channel id="batchUrgentAlertChannel" />
+		
+
+	<!-- Create a channel to receive individual alerts -->
+	<integration:channel id="jmsInChannel" />
+	
+	<!-- Workflow Step 1. Poll the database for urgent alerts, and send batches to 'batchUrgentAlertChannel' -->
+	<int-jdbc:inbound-channel-adapter id="batchUrgentAlertChannelAdapter"
+		row-mapper="alertRowMapper"
+		query="select * from Alert where urgency > 50  and processed = 0 order by persist_date for update"
+		channel="batchUrgentAlertChannel" data-source="dataSource"
+		max-rows-per-poll="1" update="update Alert set processed=1 where id in (:id)">
+		<integration:poller max-messages-per-poll="${database.urgent.maxmessagesperpoll}"
+			default="true" fixed-delay="${database.urgent.poll.fixeddelay}">
+			<integration:transactional propagation="REQUIRED"
+				isolation="READ_COMMITTED" read-only="false" transaction-manager="transactionManager" />
+		</integration:poller>
+	</int-jdbc:inbound-channel-adapter>
+	
+	<!-- Workflow Step 2 Split messages containing batches of alerts into individual alert messages, sent to  'jmsInChannel'-->
+	<integration:splitter input-channel="batchUrgentAlertChannel"
+		output-channel="jmsInChannel">
+		<bean
+			class="org.springframework.integration.splitter.DefaultMessageSplitter" />
+	</integration:splitter>
+	
+	<!-- Workflow Step 3. Send alert messages received on 'jmsInChannel' to ActiveMQ, using the 'SendTemplate' to marshall into XML -->
+	<jms:outbound-channel-adapter
+		jms-template="SendTemplate" channel="jmsInChannel" destination="requestQueue" />
+	
+	
+	<!-- Marshalls Alerts to XML -->
+	<oxm:jaxb2-marshaller id="marshaller">
+		<oxm:class-to-be-bound
+			name="com.opensourceagility.springintegration.alerts.Alert" />
+	</oxm:jaxb2-marshaller>
+
+	<!-- Converts Alert Messages to XML -->
+	<bean id="oxmMessageConverter"
+		class="org.springframework.jms.support.converter.MarshallingMessageConverter">
+		<property name="marshaller" ref="marshaller" />
+		<property name="unmarshaller" ref="marshaller" />
+		<property name="targetType" value="TEXT " />
+	</bean>
+	
+	<!-- XML Converting JMS template -->
+	<bean id="SendTemplate" class="org.springframework.jms.core.JmsTemplate">
+		<property name="connectionFactory" ref="connectionFactory" />
+		<property name="defaultDestination" ref="requestQueue" />
+		<property name="messageConverter" ref="oxmMessageConverter" />
+	</bean>
+
+	<!-- ActiveMQ -->
+	<bean id="requestQueue" class="org.apache.activemq.command.ActiveMQQueue">
+		<constructor-arg value="${activemq.queue.name}" />
+	</bean>
+
+	<!-- ActiveMQ ConnectionFactory -->
+	<bean id="connectionFactory"
+		class="org.springframework.jms.connection.CachingConnectionFactory">
+		<property name="targetConnectionFactory">
+			<bean class="org.apache.activemq.ActiveMQConnectionFactory">
+				<property name="brokerURL" value="${activemq.broker.url}" />
+				<property name="useAsyncSend" value="true" />
+			</bean>
+		</property>
+		<property name="sessionCacheSize" value="10" />
+		<property name="cacheProducers" value="false" />
+	</bean>
+
+
+	<!-- Optionally consume JMS messages sent to ActiveMQ , and write to stdout -->
+	<beans profile="default,processedTimestampDriven">
+
+		<!-- Setup channel to consume alert messages from ActiveMQ -->
+		<integration:channel id="jmsOutChannel" />
+		
+		<!-- Optional Workflow Step 4. Consumer messages from ActiveMQ, sending alerts to 'jmsOutChannel' -->
+		<jms:inbound-channel-adapter channel="jmsOutChannel"
+			destination="requestQueue">
+			<integration:poller fixed-rate="1000"
+				max-messages-per-poll="10" />
+		</jms:inbound-channel-adapter>
+
+		<!-- Optional Workflow Step 5. Send alerts received on 'jmsOutChannel' to stdout -->
+		<stream:stdout-channel-adapter id="stdout"
+			channel="jmsOutChannel" append-newline="true" />
+
+	</beans>
+	
+</beans>

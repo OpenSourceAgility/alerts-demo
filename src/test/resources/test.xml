@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:integration="http://www.springframework.org/schema/integration"
+	xmlns:tx="http://www.springframework.org/schema/tx" xmlns:file="http://www.springframework.org/schema/integration/file"
+	xmlns:stream="http://www.springframework.org/schema/integration/stream"
+	xmlns:int-jdbc="http://www.springframework.org/schema/integration/jdbc"
+	xmlns:jms="http://www.springframework.org/schema/integration/jms"
+	xmlns:jdbc="http://www.springframework.org/schema/jdbc" xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:oxm="http://www.springframework.org/schema/oxm"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+			http://www.springframework.org/schema/beans/spring-beans.xsd
+			http://www.springframework.org/schema/tx 
+			http://www.springframework.org/schema/tx/spring-tx-3.2.xsd
+			http://www.springframework.org/schema/integration/jdbc 
+			http://www.springframework.org/schema/integration/jdbc/spring-integration-jdbc.xsd
+			http://www.springframework.org/schema/integration/file
+			http://www.springframework.org/schema/integration/file/spring-integration-file.xsd
+			http://www.springframework.org/schema/jdbc 
+			http://www.springframework.org/schema/jdbc/spring-jdbc.xsd
+			http://www.springframework.org/schema/integration/jms
+			http://www.springframework.org/schema/integration/jms/spring-integration-jms.xsd
+			http://www.springframework.org/schema/context
+			http://www.springframework.org/schema/context/spring-context.xsd
+			http://www.springframework.org/schema/integration/stream
+			http://www.springframework.org/schema/integration/stream/spring-integration-stream.xsd
+			http://www.springframework.org/schema/oxm
+			http://www.springframework.org/schema/oxm/spring-oxm-3.0.xsd
+			http://www.springframework.org/schema/integration
+			http://www.springframework.org/schema/integration/spring-integration.xsd">
+
+	<beans profile="testCase">
+
+		<bean
+			class='org.springframework.beans.factory.config.PropertyPlaceholderConfigurer'>
+			<property name='location'>
+				<value>classpath:test.properties</value>
+			</property>
+		</bean>
+
+		<!-- Use embedded H2 database -->
+		<jdbc:embedded-database id="dataSource" type="H2">
+			<jdbc:script location="classpath:setup-tables.sql" />
+		</jdbc:embedded-database>
+		
+		<!-- For testing we want to create alerts in the database - this channel receives create Alert requests -->
+		<integration:channel id="createAlertRequestChannel" />
+		
+		<!-- Use a mock Amazon S3 File Uploader for testing as we don't want to use a real Amazon S3 upload -->
+		<bean id="amazonS3FileUploader"
+			class="com.opensourceagility.springintegration.alerts.nonurgent.MockAmazonS3FileUploader" />
+		
+		
+		<!-- Write alerts received on 'createAlertRequestChannel' to the database -->
+		<int-jdbc:outbound-channel-adapter
+			data-source="dataSource" channel="createAlertRequestChannel"
+			query="insert into Alert (id,message_code,urgency,processed,persist_date) 
+										values (:id,:messageCode,:urgency,:processed,:persistDate)"
+			sql-parameter-source-factory="requestSource" keys-generated="true" />
+		
+
+		<!--  Parameter source factory used when writing alerts to the database -->
+		<bean id="requestSource"
+			class="org.springframework.integration.jdbc.ExpressionEvaluatingSqlParameterSourceFactory">
+			<property name="parameterExpressions">
+				<map>
+					<entry key="messageCode" value="payload.messageCode" />
+					<entry key="urgency" value="payload.urgency" />
+					<entry key="id" value="payload.id" />
+
+					<entry key="persistDate" value="payload.persistDate" />
+					<entry key="processed" value="0" />
+				</map>
+			</property>
+		</bean>
+
+		<!-- Create a channel to consume alerts from ActiveMQ -->
+		<integration:channel id="jmsOutChannel" />
+
+		<!--  Poll ActiveMQ, sending alerts to jmsOutChannel -->
+		<jms:inbound-channel-adapter channel="jmsOutChannel"
+			destination="requestQueue">
+			<integration:poller fixed-rate="1000"
+				max-messages-per-poll="10" />
+		</jms:inbound-channel-adapter>
+
+		<!--  Bridge jmsOutChannel, sending alerts to queue channel, so they can be consumed by the test assertions -->
+		<integration:bridge input-channel="jmsOutChannel"
+			output-channel="queueChannel" />
+
+		<integration:channel id="queueChannel">
+			<integration:queue />
+		</integration:channel>
+
+
+	</beans>
+
+</beans>
