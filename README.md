@@ -8,7 +8,7 @@ These files are subsequently uploaded to Amazon S3 once it has been determined a
 
 Alerts with urgency > 50 are sent to an ActiveMQ queue
 
-Setup
+MySQL Setup
 -----
 
 ```
@@ -29,4 +29,35 @@ Example data
 
 insert into Alert (message_code,urgency) values ('someLowUrgencyMessageCode',40);
 insert into Alert (message_code,urgency) values ('someHighUrgencyMessageCode',70);
+
+Properties files
+----------------
+
+Populate src/main/resources/envionment.properties file with values for
+
+amazon.s3.bucketName=
+amazon.aws.accesskey=
+amazon.aws.secretkey=
+database.url=
+
+Running the application
+-----------------------
+
+Run com.opensourceagility.springintegration.alerts.Main as a Java application
+
+
+Running the integration test
+----------------------------
+
+mvn test
+
+The AlertsIntegrationTest creates 50 urgent alerts and 50 non-urgent alerts and checks that they are processed as expected. 
+This test is configured to create CSV files timestamped by minute rather than hour to enable the test to run in a timely manner.
+
+The test sleeps for 2 minutes before asserting that the expected CSV files have been created
+
+The AmazonS3FileUploader is mocked out and an H2 Embedded database is used instead of MySQL
+
+
+
 
